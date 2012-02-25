@@ -1,0 +1,245 @@
+PARSER_BEGIN(MathParser)
+
+package com.xrea.s268.ashphy.MathParser;
+
+import com.xrea.s268.ashphy.MathInterpreter.Instruction;
+import com.xrea.s268.ashphy.MathInterpreter.StackMachine;
+
+public class MathParser
+{
+	private static StackMachine machine = new StackMachine();
+
+	public static String parse()
+	{
+		try
+		{
+			MathParser.Expression();
+		}
+		catch(ParseException e)
+		{
+			System.out.println("Math Parser Version 0.1Alpha:  Encountered errors during parse.");
+			e.printStackTrace();
+    	}
+
+    	return machine.getResult();
+	}
+
+	private static void add(Instruction t)
+	{
+		System.out.println("TYPE=" + t.type + ", MES=" + t.message);
+		machine.add(t);
+	}
+}
+
+PARSER_END(MathParser)
+
+SKIP : {
+ " "
+|  "\t"
+|  "\n"
+|  "\r"
+|  <"//" (~["\n","\r"])* ("\n" | "\r" | "\r\n")>
+|  <"/*" (~["*"])* "*" ("*" | ~["*","/"] (~["*"])* "*")* "/">
+| "#" : PREPROCESSOR_OUTPUT
+}
+
+<PREPROCESSOR_OUTPUT> SKIP:
+{
+     "\n" : DEFAULT
+}
+
+<PREPROCESSOR_OUTPUT> MORE:
+{
+ "\\\n"
+ |
+ "\\\r\n"
+ |
+ < ~[] >
+}
+
+
+TOKEN : {
+ <INTEGER_LITERAL: <DECIMAL_LITERAL> (["l","L"])? | <HEX_LITERAL> (["l","L"])? | <OCTAL_LITERAL> (["l","L"])?>
+|  <#DECIMAL_LITERAL: ["1"-"9"] (["0"-"9"])*>
+|  <#HEX_LITERAL: "0" ["x","X"] (["0"-"9","a"-"f","A"-"F"])+>
+|  <#OCTAL_LITERAL: "0" (["0"-"7"])*>
+|  <FLOATING_POINT_LITERAL: (["0"-"9"])+ "." (["0"-"9"])* (<EXPONENT>)? (["f","F","d","D"])? | "." (["0"-"9"])+ (<EXPONENT>)? (["f","F","d","D"])? | (["0"-"9"])+ <EXPONENT> (["f","F","d","D"])? | (["0"-"9"])+ (<EXPONENT>)? ["f","F","d","D"]>
+|  <#EXPONENT: ["e","E"] (["+","-"])? (["0"-"9"])+>
+|  <CHARACTER_LITERAL: "\'" (~["\'","\\","\n","\r"] | "\\" (["n","t","b","r","f","\\","\'","\""] | ["0"-"7"] (["0"-"7"])? | ["0"-"3"] ["0"-"7"] ["0"-"7"])) "\'">
+|  <STRING_LITERAL: "\"" ( ~["\"","\\","\n","\r"] | "\\" ( ["n","t","b","r","f","\\","\'","\""] | ["0"-"7"] (["0"-"7"])?  | ["0"-"3"] ["0"-"7"] ["0"-"7"] | ( ["\n","\r"] | "\r\n")))* "\"">
+}
+
+TOKEN : {
+ <IDENTIFIER: <LETTER> (<LETTER> | <DIGIT>)*>
+|  <#LETTER: ["$","A"-"Z","_","a"-"z"]>
+|  <#DIGIT: ["0"-"9"]>
+}
+
+//演算子の定義
+TOKEN : {
+	<PLUS: "+">
+|	<MINUS: "-">
+|	<TIMES: "*">
+|	<POWER: "**">
+|	<FACTORIAL: "!">
+|	<DIV: "/">
+|	<REMAINDER: "%">
+|	<AND: "&">
+|	<OR: "|">
+|	<XOR: "^">
+|	<LSHIFT: "<<">
+|	<RSHIFT: ">>">
+}
+
+//文
+void Expression() : {}
+{
+	AssignmentExpression() ( "," AssignmentExpression() )*
+}
+
+//代入文
+void AssignmentExpression() :
+{
+	String op = null;
+}
+{
+	  LOOKAHEAD(UnaryExpression() AssignmentOperator())  UnaryExpression() op = AssignmentOperator() AssignmentExpression()
+	  {add(new Instruction(Instruction.ASSIGNMENT , op));} |
+
+	  ConstantExpression()
+}
+
+//代入演算子
+String AssignmentOperator() :
+{
+	String op = null;
+}
+{
+	( "=" {op="set";} |
+	  "*="{op="mul";} |
+	  "/="{op="div";} |
+	  "%="{op="rem";} |
+	  "+="{op="add";} |
+	  "-="{op="sub";} |
+	  "<<="{op="lshift";} |
+	  ">>="{op="rshift";} |
+	  "&="{op="and";} |
+	  "^="{op="xor";}
+	  "|="{op="or";} )
+	  {return op;}
+
+}
+
+//評価式
+void ConstantExpression() : {}
+{
+	InclusiveORExpression()
+}
+
+//論理和
+void InclusiveORExpression() : {}{	ExclusiveORExpression() [ <OR> InclusiveORExpression() ]}
+//排他的論理和void ExclusiveORExpression() : {}{	ANDExpression() [ <XOR> ExclusiveORExpression() ]}
+//論理積void ANDExpression() : {}{	ShiftExpression() [ <AND> ANDExpression() ]}
+//シフト演算
+void ShiftExpression() : {}
+{
+	AdditiveExpression() [ ( <LSHIFT> | <RSHIFT> ) ShiftExpression() ]
+}
+
+//加減算
+void AdditiveExpression() :
+{
+	String op;
+}
+{
+	MultiplicativeExpression()
+
+//	[ ( t = <PLUS> | t = <MINUS> ) AdditiveExpression() {add(t);}]
+	(LOOKAHEAD(1) ( <PLUS>{op="PLUS";} | <MINUS>{op="MINUS";} ) MultiplicativeExpression()
+	{add(new Instruction(Instruction.OPERATOR , op));} )*
+}
+
+//剰余算
+void MultiplicativeExpression() :
+{
+	String op;
+}
+{
+	Power()//	[ ( t = <TIMES> | t = <DIV> | t = <REMAINDER> ) MultiplicativeExpression() {add(t);} ]
+	(LOOKAHEAD(1) ( <TIMES>{op="TIMES";} | <DIV>{op="DIV";} | <REMAINDER>{op="REMAINDER";} ) Power()
+	{add(new Instruction(Instruction.OPERATOR , op));} )*
+}
+
+//単項式
+void UnaryExpression() :
+{
+	Instruction t = null;
+}
+{
+	(PostfixExpression() | t = UnaryOperator() PostfixExpression() )
+	{if(t != null)add(t);}
+}
+
+//単項演算子
+Instruction UnaryOperator() :
+{
+	String op;
+}
+{
+	( <PLUS>{op="PLUS";} | <MINUS>{op="MINUS";})
+	{return new Instruction(Instruction.UNARY , op);}
+}
+
+//関数呼び出し
+void PostfixExpression() :
+{
+	Token t = null;
+}
+{
+	t = PrimaryExpression()
+	( "(" [ LOOKAHEAD( ArgumentExpressionList() ) ArgumentExpressionList() ] ")" )*
+	{if(t != null)add(new Instruction(Instruction.ID , t.image));}
+}
+
+//べき乗
+void Power() : {}
+{
+	Factorial() [ <POWER> Power() {add(new Instruction(Instruction.OPERATOR, "POWER"));}]
+}
+
+//階乗演算子
+void Factorial() : {}
+{
+	UnaryExpression() [ <FACTORIAL> {add(new Instruction(Instruction.UNARY , "FACTORIAL"));} ]
+}
+
+//primary-expression は識別子, 整数定数, 文字定数, 浮動小数点定数, 定数文字列, 列挙定数, 括弧でくくられた式のいずれか
+Token PrimaryExpression() :
+{
+	Token t = null;
+}
+{
+	( t = <IDENTIFIER> {return t;}
+	| Constant() {return t;}
+	|"(" Expression() ")" {return t;} )
+}
+
+//引数のリスト
+void ArgumentExpressionList() : {}
+{
+	AssignmentExpression() ( "," AssignmentExpression() )*
+}
+
+//定数
+void Constant() :
+{
+	Token t = null;
+}
+{
+	(t = <INTEGER_LITERAL> |
+	 t = <FLOATING_POINT_LITERAL> |
+	 t = <CHARACTER_LITERAL> |
+	 t = <STRING_LITERAL> )
+	{add(new Instruction(Instruction.NUMERIC , t.image));}
+}
+
