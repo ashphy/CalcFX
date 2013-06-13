@@ -1,6 +1,6 @@
 # CalcFX
 
-CalcFX is a powerful calculator, can be given mathematical expression, and supports the features as functions, variables, constant numbers, many operators(e.g. remainder, factorial�c). 
+CalcFX is a powerful calculator, can be given mathematical expression, and supports the features as functions, variables, constant numbers, many operators(e.g. remainder, factorial).
 
 This application provides unlimited saving of calculation history and quick copy.
 
